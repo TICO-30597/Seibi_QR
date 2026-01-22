@@ -1,5 +1,5 @@
 /*
- * M5Stack QRコードリーダー & UDP送信
+ * M5Stack QRコードリーダー & OMRON PLCへ FINS UDP送信して書込み
  * 
  * 機能概要:
  *   - M5Stack Basic + QRコードユニットでQRコードを読み取り
