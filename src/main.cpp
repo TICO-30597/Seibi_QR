@@ -65,6 +65,7 @@ const uint32_t QRCODE_I2C_SPEED = 100000U;
 const int SD_CS_PIN = 4;  // M5Stack BasicのSDカードCSピン
 // その他設定
 String OP_NUM = "10";  // 工程番号（CSVから上書き可能）
+String LINE_NUM = "01";  // ライン番号（CSVから上書き可能）
 const int WIFI_CONNECT_RETRY_MAX = 20;
 const int WIFI_CONNECT_RETRY_DELAY = 1000;  // ms
 const unsigned long SCAN_TIMEOUT_MS = 20000;  // QRスキャンタイムアウト(20秒)
@@ -118,6 +119,8 @@ void drawButtonLabels() {
   M5.Display.fillRect(displayWidth / 3, displayHeight - BUTTON_LABEL_HEIGHT, displayWidth / 3 - 1, BUTTON_LABEL_HEIGHT, DARKGREY);
   M5.Display.fillRect(2 * displayWidth / 3, displayHeight - BUTTON_LABEL_HEIGHT, displayWidth / 3 - 1, BUTTON_LABEL_HEIGHT, GREEN);
   
+  M5.Display.fillRect(0,displayHeight - BUTTON_LABEL_HEIGHT * 2, displayWidth, BUTTON_LABEL_HEIGHT -1 , WHITE);
+
   // ボタンラベルテキストを描画
   M5.Display.setFont(&fonts::lgfxJapanGothic_20);
   M5.Display.setTextDatum(middle_center);
@@ -128,6 +131,10 @@ void drawButtonLabels() {
   M5.Display.drawString("読取中止", displayWidth / 2, labelY);
   M5.Display.setTextColor(BLACK);
   M5.Display.drawString("整備完了", displayWidth * 5 / 6, labelY);
+
+  M5.Display.setTextColor(BLACK);
+  M5.Display.drawString(("ライン：" + LINE_NUM + "  工程：" + OP_NUM).c_str(), displayWidth / 2, displayHeight - BUTTON_LABEL_HEIGHT - BUTTON_LABEL_Y_OFFSET);
+
 }
 
 /**
@@ -199,7 +206,10 @@ void loadSettingsFromSD() {
     value.trim();
     
     // キーに応じて値を設定
-    if (key == "OP_NUM") {
+    if (key == "LINE_NUM") {
+      LINE_NUM = value;
+      canvas.printf("  LINE_NUM: %s\n", value.c_str());
+    } else if (key == "OP_NUM") {
       OP_NUM = value;
       canvas.printf("  OP_NUM: %s\n", value.c_str());
     } else if (key == "LOCAL_IP") {
@@ -331,7 +341,7 @@ void sendQRCodeData(const char* data, const char* status) {
     // 書き込みデータ準備（最後に通し番号を付与）
     char seqStr[3];
     sprintf(seqStr, "%02d", currentSequence);
-    String writeData = OP_NUM + String(status) + String(data) + String(seqStr);
+    String writeData = LINE_NUM + OP_NUM + String(status) + String(data) + String(seqStr);
     int dataLen = writeData.length();
     
     // データ長をワード単位に変換（2バイト=1ワード、奇数なら切り上げ）
@@ -659,7 +669,7 @@ void setup() {
 
   // Canvas初期化（ボタンラベル領域を除く）
   canvas.setColorDepth(1);
-  canvas.createSprite(M5.Display.width(), M5.Display.height() - BUTTON_LABEL_HEIGHT - 10);
+  canvas.createSprite(M5.Display.width(), M5.Display.height() - BUTTON_LABEL_HEIGHT * 2 - 10);
   canvas.setFont(&fonts::lgfxJapanGothic_20);
   canvas.setTextScroll(true);
   M5.Display.clear();
