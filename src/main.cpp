@@ -150,7 +150,7 @@ void loadSettingsFromSD() {
   updateDisplay();
   
   // SDカード初期化（M5Stack BasicはCSピン4を使用）
-  // 最大20MHzでSPIバスを初期化
+  // 最大25MHzでSPIバスを初期化
   SPI.begin(18, 19, 23, SD_CS_PIN);  // SCK=18, MISO=19, MOSI=23, CS=4
   if (!SD.begin(SD_CS_PIN, SPI, 25000000)) {
     canvas.println("SDカード初期化失敗");
@@ -331,7 +331,7 @@ void sendQRCodeData(const char* data, const char* status) {
     // 書き込みデータ準備（最後に通し番号を付与）
     char seqStr[3];
     sprintf(seqStr, "%02d", currentSequence);
-    String writeData = OP_NUM + "," + String(status) + "," + String(data) + String(seqStr);
+    String writeData = OP_NUM + String(status) + String(data) + String(seqStr);
     int dataLen = writeData.length();
     
     // データ長をワード単位に変換（2バイト=1ワード、奇数なら切り上げ）
@@ -373,6 +373,11 @@ void sendQRCodeData(const char* data, const char* status) {
         finsPacket[offset++] = 0x00;  // パディング
       }
     }
+
+    // UDPバッファをクリア（古いパケットを破棄）
+    while (udp.parsePacket() > 0) {
+      udp.flush();
+    }
     
     // UDPパケット送信（一度に全データを送信）
     udp.beginPacket(PLC_IP, PLC_PORT);
@@ -399,11 +404,6 @@ void sendQRCodeData(const char* data, const char* status) {
     
     // 最終通信時刻を更新
     lastCommunicationTime = millis();
-    
-    // UDPバッファをクリア（古いパケットを破棄）
-    while (udp.parsePacket() > 0) {
-      udp.flush();
-    }
     
     // レスポンス待機
     unsigned long startTime = millis();
