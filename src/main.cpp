@@ -12,7 +12,8 @@
  *   C (右): 整備完了モード → QR読み取り時に STATUS="02" を送信
  *
  * QRサンプル データ例:
- *   - "DK37173JB352101 00" 
+ *  "01" + "10"+ "01" + "DK37173JB352101 00" + "01" + "20240612153045"
+ *    (ライン番号 + 工程番号 + ステータス + QRコードデータ + 通し番号 + タイムスタンプ)
  */
 
 #include <M5Unified.h>
@@ -22,6 +23,7 @@
 #include <WiFiUdp.h>
 #include <SD.h>
 #include <FS.h>
+#include <time.h>
 
 // ========================================
 // 設定項目
@@ -30,6 +32,11 @@
 // WiFi設定（デフォルト値、CSVから上書き可能）
 String WIFI_SSID     = "oobu_local_wireless";
 String WIFI_PASSWORD = "Cw5j0YE2Akj3X1bBek3P";
+
+// NTP設定
+const char* NTP_SERVER = "192.168.181.1";  // NTPサーバーアドレス
+const long  GMT_OFFSET_SEC = 9 * 3600;      // JST = UTC+9時間
+const int   DAYLIGHT_OFFSET_SEC = 0;        // サマータイムなし
 
 // 固定IP設定（デフォルト値、CSVから上書き可能）
 IPAddress LOCAL_IP(192, 168, 181, 250);
@@ -61,8 +68,10 @@ const uint8_t  QRCODE_I2C_ADDR = UNIT_QRCODE_ADDR;  // 0x21
 const uint8_t  QRCODE_SDA_PIN = 21;
 const uint8_t  QRCODE_SCL_PIN = 22;
 const uint32_t QRCODE_I2C_SPEED = 100000U;
+
 // SDカード設定
 const int SD_CS_PIN = 4;  // M5Stack BasicのSDカードCSピン
+
 // その他設定
 String OP_NUM = "10";  // 工程番号（CSVから上書き可能）
 String LINE_NUM = "01";  // ライン番号（CSVから上書き可能）
@@ -70,9 +79,6 @@ const int WIFI_CONNECT_RETRY_MAX = 20;
 const int WIFI_CONNECT_RETRY_DELAY = 1000;  // ms
 const unsigned long SCAN_TIMEOUT_MS = 20000;  // QRスキャンタイムアウト(20秒)
 const unsigned long KEEPALIVE_INTERVAL = 15000;  // キープアライブ間隔(30秒)
-
-// 自動スキャンモード（通常はコメントアウト）
-// #define I2C_AUTO_SCAN_MODE
 
 // ========================================
 // グローバル変数
@@ -94,6 +100,8 @@ void loadSettingsFromSD();
 void drawButtonLabels();
 void updateDisplay();
 void connectWiFi();
+void syncTimeFromNTP();
+void printCurrentTime();
 void sendQRCodeData(const char* data, const char* status);
 void sendKeepAlive();
 void handleQRCodeScan();
@@ -207,11 +215,19 @@ void loadSettingsFromSD() {
     
     // キーに応じて値を設定
     if (key == "LINE_NUM") {
-      LINE_NUM = value;
-      canvas.printf("  LINE_NUM: %s\n", value.c_str());
+      // 数値として解析して2桁0埋めフォーマットに変換
+      int lineNum = value.toInt();
+      char lineBuf[3];
+      sprintf(lineBuf, "%02d", lineNum);
+      LINE_NUM = String(lineBuf);
+      canvas.printf("  LINE_NUM: %s\n", LINE_NUM.c_str());
     } else if (key == "OP_NUM") {
-      OP_NUM = value;
-      canvas.printf("  OP_NUM: %s\n", value.c_str());
+      // 数値として解析して2桁0埋めフォーマットに変換
+      int opNum = value.toInt();
+      char opBuf[3];
+      sprintf(opBuf, "%02d", opNum);
+      OP_NUM = String(opBuf);
+      canvas.printf("  OP_NUM: %s\n", OP_NUM.c_str());
     } else if (key == "LOCAL_IP") {
       // IPアドレスを解析
       if (LOCAL_IP.fromString(value)) {
@@ -279,6 +295,64 @@ void connectWiFi() {
 }
 
 // ========================================
+// NTP時刻同期関数
+// ========================================
+
+/**
+ * NTPサーバーから時刻を取得して内部時計を同期
+ */
+void syncTimeFromNTP() {
+  canvas.println("NTP時刻同期中...");
+  canvas.printf("NTPサーバー: %s\n", NTP_SERVER);
+  updateDisplay();
+  
+  // NTPサーバーと同期（configTime関数）
+  // 第1引数: GMT_OFFSET_SEC（タイムゾーンオフセット秒）
+  // 第2引数: DAYLIGHT_OFFSET_SEC（サマータイムオフセット秒）
+  // 第3引数: NTPサーバーアドレス
+  configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
+  
+  // 時刻取得まで待機（最大10秒）
+  int attempts = 0;
+  struct tm timeinfo;
+  while (!getLocalTime(&timeinfo) && attempts < 10) {
+    canvas.print(".");
+    updateDisplay();
+    delay(1000);
+    attempts++;
+  }
+  
+  if (getLocalTime(&timeinfo)) {
+    canvas.println("\nNTP時刻同期成功！");
+    printCurrentTime();
+  } else {
+    canvas.println("\nNTP時刻同期失敗");
+    canvas.println("NTPサーバーに接続できません");
+    canvas.println("3秒後に再起動します...");
+    updateDisplay();
+    delay(3000);
+    ESP.restart();  // ESP32を再起動
+  }
+  updateDisplay();
+}
+
+/**
+ * 現在時刻を表示
+ */
+void printCurrentTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    canvas.println("時刻取得失敗");
+    return;
+  }
+  
+  // 時刻をフォーマットして表示
+  char timeStr[64];
+  strftime(timeStr, sizeof(timeStr), "%Y/%m/%d %H:%M:%S", &timeinfo);
+  canvas.printf("現在時刻: %s\n\n", timeStr);
+}
+
+// ========================================
 // HTTP通信関数
 // ========================================
 // UDP通信関数
@@ -307,6 +381,25 @@ void sendQRCodeData(const char* data, const char* status) {
   
   // 今回の送信で使う通し番号を保存（リトライでは同じ番号を使う）
   uint8_t currentSequence = sequenceNumber;
+  
+  // 現在時刻を取得（YYYYMMDDHHMMSS形式）- リトライでも同じ時刻を使用
+  struct tm timeinfo;
+  char timeStr[15];
+  if (getLocalTime(&timeinfo)) {
+    strftime(timeStr, sizeof(timeStr), "%Y%m%d%H%M%S", &timeinfo);
+  } else {
+    strcpy(timeStr, "00000000000000");  // 時刻取得失敗時
+  }
+  
+  // 書き込みデータ準備（最後に通し番号と時刻を付与）- リトライでも同じデータを使用
+  char seqStr[3];
+  sprintf(seqStr, "%02d", currentSequence);
+  // String writeData = LINE_NUM + OP_NUM + String(status) + String(data) + String(seqStr) + String(timeStr);
+  String writeData = String(timeStr) + LINE_NUM + OP_NUM + String(status) + String(data);
+  int dataLen = writeData.length();
+  
+  // データ長をワード単位に変換（2バイト=1ワード、奇数なら切り上げ）
+  int wordCount = (dataLen + 1) / 2;
   
   // リトライループ
   bool success = false;
@@ -337,15 +430,6 @@ void sendQRCodeData(const char* data, const char* status) {
     uint8_t finsCommand[2];
     finsCommand[0] = 0x01;  // メインコマンド：メモリエリア書き込み
     finsCommand[1] = 0x02;  // サブコマンド
-    
-    // 書き込みデータ準備（最後に通し番号を付与）
-    char seqStr[3];
-    sprintf(seqStr, "%02d", currentSequence);
-    String writeData = LINE_NUM + OP_NUM + String(status) + String(data) + String(seqStr);
-    int dataLen = writeData.length();
-    
-    // データ長をワード単位に変換（2バイト=1ワード、奇数なら切り上げ）
-    int wordCount = (dataLen + 1) / 2;
     
     // 書き込みパラメータ
     uint8_t writeParams[6];
@@ -431,12 +515,14 @@ void sendQRCodeData(const char* data, const char* status) {
           uint8_t mainEndCode = response[12];
           uint8_t subEndCode = response[13];
           
-          canvas.println("レスポンス受信");
-          canvas.printf("エンドコード: %02X %02X\n", mainEndCode, subEndCode);
+          // canvas.println("レスポンス受信");
+          // canvas.printf("エンドコード: %02X %02X\n", mainEndCode, subEndCode);
           
           // エンドコード判定
           if (mainEndCode == 0x00 && subEndCode == 0x00) {
+            canvas.setTextColor(GREEN);
             canvas.println("〇 PLC書き込み成功！");
+            canvas.setTextColor(WHITE);
             canvas.printf("DM%d～: %s\n", FINS_START_ADDRESS, writeData.c_str());
             updateDisplay();
             success = true;
@@ -444,6 +530,7 @@ void sendQRCodeData(const char* data, const char* status) {
           } else {
             // エラーコードの詳細表示
             canvas.println("× PLCエラー発生");
+            canvas.printf("エンドコード: %02X %02X\n", mainEndCode, subEndCode);
             
             // 主なエラーコードの解説
             if (mainEndCode == 0x01) {
@@ -490,7 +577,9 @@ void sendQRCodeData(const char* data, const char* status) {
     // タイムアウトの場合
     // タイムアウトの場合
     if (!success) {
+      canvas.setTextColor(YELLOW);
       canvas.println("× レスポンスタイムアウト");
+      canvas.setTextColor(WHITE);
       updateDisplay();
       
       // 最終試行でなければ待機
@@ -504,7 +593,9 @@ void sendQRCodeData(const char* data, const char* status) {
   
   // 最終結果表示
   if (!success) {
+    canvas.setTextColor(RED);
     canvas.println("× PLC書き込み失敗：リトライ上限到達");
+    canvas.setTextColor(WHITE);
     updateDisplay();
   }
 }
@@ -668,7 +759,7 @@ void setup() {
   M5.Speaker.setVolume(0);  // スピーカー無音化
 
   // Canvas初期化（ボタンラベル領域を除く）
-  canvas.setColorDepth(1);
+  canvas.setColorDepth(8);
   canvas.createSprite(M5.Display.width(), M5.Display.height() - BUTTON_LABEL_HEIGHT * 2 - 10);
   canvas.setFont(&fonts::lgfxJapanGothic_20);
   canvas.setTextScroll(true);
@@ -691,6 +782,9 @@ void setup() {
   // WiFi接続
   connectWiFi();
 
+  // NTP時刻同期
+  syncTimeFromNTP();
+
   // UDP受信ポートを開く
   if (udp.begin(LOCAL_UDP_PORT)) {
     canvas.printf("UDPポート%dで受信開始\n", LOCAL_UDP_PORT);
@@ -703,22 +797,16 @@ void setup() {
   lastCommunicationTime = millis();
 
   // スキャンモード設定
-#ifdef I2C_AUTO_SCAN_MODE
-  qrcode.setTriggerMode(AUTO_SCAN_MODE);
-  canvas.println("自動スキャンモード");
-#else
   qrcode.setTriggerMode(MANUAL_SCAN_MODE);
-#endif
+
   updateDisplay();
 }
 
 void loop() {
   handleQRCodeScan();      // QRコード読み取り処理
   
-#ifndef I2C_AUTO_SCAN_MODE
   handleButtonInput();     // ボタン入力処理
   checkScanTimeout();      // スキャンタイムアウトチェック
-#endif
   
   checkKeepAlive();        // キープアライブチェック
 }
