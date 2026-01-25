@@ -91,6 +91,8 @@ String currentStatus = "";  // "01" or "02"
 unsigned long scanStartTime = 0;  // スキャン開始時刻（0=スキャン未実行）
 unsigned long lastCommunicationTime = 0;  // 最終通信時刻
 uint8_t sequenceNumber = 0;  // 通し番号（00-99）
+bool isStartMode = false;  // 整備開始モードがアクティブか
+bool isEndMode = false;  // 整備完了モードがアクティブか
 
 // ========================================
 // 関数プロトタイプ
@@ -143,6 +145,19 @@ void drawButtonLabels() {
   M5.Display.setTextColor(BLACK);
   M5.Display.drawString(("ライン：" + LINE_NUM + "  工程：" + OP_NUM).c_str(), displayWidth / 2, displayHeight - BUTTON_LABEL_HEIGHT - BUTTON_LABEL_Y_OFFSET);
 
+  // 整備開始モードがアクティブな場合、赤枠を描画
+  if (isStartMode) {
+    M5.Display.drawRect(0, displayHeight - BUTTON_LABEL_HEIGHT, displayWidth / 3 - 1, BUTTON_LABEL_HEIGHT, RED);
+    M5.Display.drawRect(1, displayHeight - BUTTON_LABEL_HEIGHT + 1, displayWidth / 3 - 3, BUTTON_LABEL_HEIGHT - 2, RED);
+    M5.Display.drawRect(2, displayHeight - BUTTON_LABEL_HEIGHT + 2, displayWidth / 3 - 5, BUTTON_LABEL_HEIGHT - 4, RED);
+  }
+  
+  // 整備完了モードがアクティブな場合、赤枠を描画
+  if (isEndMode) {
+    M5.Display.drawRect(2 * displayWidth / 3, displayHeight - BUTTON_LABEL_HEIGHT, displayWidth / 3 - 1, BUTTON_LABEL_HEIGHT, RED);
+    M5.Display.drawRect(2 * displayWidth / 3 + 1, displayHeight - BUTTON_LABEL_HEIGHT + 1, displayWidth / 3 - 3, BUTTON_LABEL_HEIGHT - 2, RED);
+    M5.Display.drawRect(2 * displayWidth / 3 + 2, displayHeight - BUTTON_LABEL_HEIGHT + 2, displayWidth / 3 - 5, BUTTON_LABEL_HEIGHT - 4, RED);
+  }
 }
 
 /**
@@ -692,8 +707,11 @@ void handleQRCodeScan() {
     sendQRCodeData((const char*)buffer, currentStatus.c_str());
   }
   
-  // QR読み取り成功したのでタイマーをリセット
+  // QR読み取り成功したのでタイマーとモードフラグをリセット
   scanStartTime = 0;
+  isStartMode = false;
+  isEndMode = false;
+  updateDisplay();  // 赤枠を消すために画面更新
 }
 
 /**
@@ -705,6 +723,8 @@ void handleButtonInput() {
   // Aボタン: 整備開始モード
   if (M5.BtnA.wasPressed()) {
     currentStatus = "01";
+    isStartMode = true;
+    isEndMode = false;
     qrcode.setDecodeTrigger(1);
     scanStartTime = millis();  // スキャン開始時刻を記録
     canvas.println("整備開始登録します");
@@ -713,6 +733,8 @@ void handleButtonInput() {
   
   // Bボタン: 読み取り中止
   if (M5.BtnB.wasPressed()) {
+    isStartMode = false;
+    isEndMode = false;
     qrcode.setDecodeTrigger(0);
     scanStartTime = 0;  // タイマーをリセット
     canvas.println("QR読取中止します");
@@ -722,6 +744,8 @@ void handleButtonInput() {
   // Cボタン: 整備完了モード
   if (M5.BtnC.wasPressed()) {
     currentStatus = "02";
+    isStartMode = false;
+    isEndMode = true;
     qrcode.setDecodeTrigger(1);
     scanStartTime = millis();  // スキャン開始時刻を記録
     canvas.println("整備完了登録します");
@@ -743,6 +767,8 @@ void checkScanTimeout() {
   if (millis() - scanStartTime >= SCAN_TIMEOUT_MS) {
     qrcode.setDecodeTrigger(0);
     scanStartTime = 0;
+    isStartMode = false;
+    isEndMode = false;
     canvas.println("QR読取タイムアウト");
     updateDisplay();
   }
