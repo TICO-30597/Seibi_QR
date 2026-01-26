@@ -627,6 +627,9 @@ void sendKeepAlive() {
 
   static uint8_t sid = 0x80;  // キープアライブ用Service ID
   
+  canvas.println("キープアライブ送信中...");
+  updateDisplay();
+  
   // FINSヘッダー作成（10バイト）
   uint8_t finsHeader[10];
   finsHeader[0] = 0x80;              // ICF
@@ -655,13 +658,91 @@ void sendKeepAlive() {
   memcpy(finsPacket + offset, finsCommand, 2);
   offset += 2;
   
+  // UDPバッファをクリア（古いパケットを破棄）
+  while (udp.parsePacket() > 0) {
+    udp.flush();
+  }
+  
   // UDPパケット送信
   udp.beginPacket(PLC_IP, PLC_PORT);
   udp.write(finsPacket, packetSize);
-  udp.endPacket();
+  int result = udp.endPacket();
+  
+  if (result != 1) {
+    canvas.setTextColor(RED);
+    canvas.println("× キープアライブ送信失敗");
+    canvas.setTextColor(WHITE);
+    updateDisplay();
+    lastCommunicationTime = millis();
+    return;
+  }
   
   // 最終通信時刻を更新
   lastCommunicationTime = millis();
+  
+  // レスポンス待機（短めのタイムアウト: 2秒）
+  unsigned long startTime = millis();
+  bool responseReceived = false;
+  
+  while (millis() - startTime < 2000) {
+    int recvPacketSize = udp.parsePacket();
+    if (recvPacketSize >= 14) {  // 最小レスポンスサイズ
+      // レスポンス受信
+      uint8_t response[256];
+      int len = udp.read(response, sizeof(response));
+      
+      if (len >= 14) {
+        uint8_t mainEndCode = response[12];
+        uint8_t subEndCode = response[13];
+        
+        // エンドコード判定
+        if (mainEndCode == 0x00 && subEndCode == 0x00) {
+          canvas.setTextColor(GREEN);
+          canvas.println("〇 キープアライブ成功");
+          
+          // PLC時刻データを取得（レスポンスに含まれている場合）
+          if (len >= 21) {  // 時刻データを含む完全なレスポンス
+            uint8_t year = response[14];   // 年（下2桁）
+            uint8_t month = response[15];  // 月
+            uint8_t day = response[16];    // 日
+            uint8_t hour = response[17];   // 時
+            uint8_t min = response[18];    // 分
+            uint8_t sec = response[19];    // 秒
+            
+            // BCD変換（PLCの時刻データはBCD形式の場合がある）
+            int yearInt = (year >> 4) * 10 + (year & 0x0F);
+            int monthInt = (month >> 4) * 10 + (month & 0x0F);
+            int dayInt = (day >> 4) * 10 + (day & 0x0F);
+            int hourInt = (hour >> 4) * 10 + (hour & 0x0F);
+            int minInt = (min >> 4) * 10 + (min & 0x0F);
+            int secInt = (sec >> 4) * 10 + (sec & 0x0F);
+            
+            canvas.printf("PLC時刻: 20%02d/%02d/%02d %02d:%02d:%02d\n", 
+                         yearInt, monthInt, dayInt, hourInt, minInt, secInt);
+          }
+          
+          canvas.setTextColor(WHITE);
+          responseReceived = true;
+          break;
+        } else {
+          canvas.setTextColor(YELLOW);
+          canvas.printf("△ キープアライブエラー: %02X %02X\n", mainEndCode, subEndCode);
+          canvas.setTextColor(WHITE);
+          responseReceived = true;
+          break;
+        }
+      }
+    }
+    delay(10);
+  }
+  
+  if (!responseReceived) {
+    canvas.setTextColor(YELLOW);
+    canvas.println("△ キープアライブタイムアウト");
+    canvas.setTextColor(WHITE);
+  }
+  
+  updateDisplay();
 }
 
 /**
