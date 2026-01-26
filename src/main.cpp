@@ -755,6 +755,11 @@ void checkKeepAlive() {
     return;
   }
   
+  // スキャン中はキープアライブを送信しない
+  if (scanStartTime != 0) {
+    return;
+  }
+  
   // 30秒経過したかチェック
   if (millis() - lastCommunicationTime >= KEEPALIVE_INTERVAL) {
     sendKeepAlive();
