@@ -78,7 +78,7 @@ String LINE_NUM = "01";  // ライン番号（CSVから上書き可能）
 const int WIFI_CONNECT_RETRY_MAX = 20;
 const int WIFI_CONNECT_RETRY_DELAY = 1000;  // ms
 const unsigned long SCAN_TIMEOUT_MS = 20000;  // QRスキャンタイムアウト(20秒)
-const unsigned long KEEPALIVE_INTERVAL = 15000;  // キープアライブ間隔(15秒)
+const unsigned long KEEPALIVE_INTERVAL = 30100;  // キープアライブ間隔(30秒)
 
 // ========================================
 // グローバル変数
@@ -535,10 +535,12 @@ void sendQRCodeData(const char* data, const char* status) {
           
           // エンドコード判定
           if (mainEndCode == 0x00 && subEndCode == 0x00) {
+            canvas.setFont(&fonts::lgfxJapanGothic_20);
             canvas.setTextColor(GREEN);
             canvas.println("〇 PLC書き込み成功！");
-            canvas.setTextColor(WHITE);
-            canvas.printf("DM%d～: %s\n", FINS_START_ADDRESS, writeData.c_str());
+            // canvas.setTextColor(WHITE);
+            // canvas.printf("DM%d～: %s\n", FINS_START_ADDRESS, writeData.c_str());
+            canvas.setFont(&fonts::lgfxJapanGothic_16);
             updateDisplay();
             success = true;
             break;
@@ -592,9 +594,11 @@ void sendQRCodeData(const char* data, const char* status) {
     // タイムアウトの場合
     // タイムアウトの場合
     if (!success) {
+      canvas.setFont(&fonts::lgfxJapanGothic_20);
       canvas.setTextColor(YELLOW);
       canvas.println("× レスポンスタイムアウト");
       canvas.setTextColor(WHITE);
+      canvas.setFont(&fonts::lgfxJapanGothic_16);
       updateDisplay();
       
       // 最終試行でなければ待機
@@ -625,10 +629,12 @@ void sendKeepAlive() {
     return;
   }
 
+  canvas.setFont(&fonts::lgfxJapanGothic_12);
+
   static uint8_t sid = 0x80;  // キープアライブ用Service ID
   
-  canvas.println("キープアライブ送信中...");
-  updateDisplay();
+  // canvas.println("キープアライブ送信中...");
+  // updateDisplay();
   
   // FINSヘッダー作成（10バイト）
   uint8_t finsHeader[10];
@@ -698,7 +704,7 @@ void sendKeepAlive() {
         // エンドコード判定
         if (mainEndCode == 0x00 && subEndCode == 0x00) {
           canvas.setTextColor(GREEN);
-          canvas.println("〇 キープアライブ成功");
+          canvas.print("〇 通信確認正常 ");
           
           // PLC時刻データを取得（レスポンスに含まれている場合）
           if (len >= 21) {  // 時刻データを含む完全なレスポンス
@@ -726,7 +732,7 @@ void sendKeepAlive() {
           break;
         } else {
           canvas.setTextColor(YELLOW);
-          canvas.printf("△ キープアライブエラー: %02X %02X\n", mainEndCode, subEndCode);
+          canvas.printf("△ 通信確認異常: %02X %02X\n", mainEndCode, subEndCode);
           canvas.setTextColor(WHITE);
           responseReceived = true;
           break;
@@ -738,16 +744,18 @@ void sendKeepAlive() {
   
   if (!responseReceived) {
     canvas.setTextColor(YELLOW);
-    canvas.println("△ キープアライブタイムアウト");
+    canvas.println("△ 通信確認タイムアウト");
     canvas.setTextColor(WHITE);
   }
-  
+
+  canvas.setFont(&fonts::lgfxJapanGothic_20);
+
   updateDisplay();
 }
 
 /**
  * キープアライブチェック
- * 15秒間無通信ならキープアライブパケットを送信
+ * 30秒間無通信ならキープアライブパケットを送信
  */
 void checkKeepAlive() {
   // WiFi接続チェック
@@ -873,7 +881,7 @@ void setup() {
   // Canvas初期化（ボタンラベル領域を除く）
   canvas.setColorDepth(8);
   canvas.createSprite(M5.Display.width(), M5.Display.height() - BUTTON_LABEL_HEIGHT * 2 - 10);
-  canvas.setFont(&fonts::lgfxJapanGothic_20);
+  canvas.setFont(&fonts::lgfxJapanGothic_16);
   canvas.setTextScroll(true);
   M5.Display.clear();
   
