@@ -418,6 +418,9 @@ void sendQRCodeData(const char* data, const char* status) {
   
   // リトライループ
   bool success = false;
+  canvas.setFont(&fonts::lgfxJapanGothic_16);
+  canvas.setTextColor(WHITE);
+
   for (int attempt = 1; attempt <= UDP_RETRY_MAX; attempt++) {
     // 送信試行表示
     if (attempt == 1) {
@@ -541,6 +544,7 @@ void sendQRCodeData(const char* data, const char* status) {
             // canvas.setTextColor(WHITE);
             // canvas.printf("DM%d～: %s\n", FINS_START_ADDRESS, writeData.c_str());
             canvas.setFont(&fonts::lgfxJapanGothic_16);
+            canvas.setTextColor(WHITE);
             updateDisplay();
             success = true;
             break;
@@ -629,7 +633,7 @@ void sendKeepAlive() {
     return;
   }
 
-  canvas.setFont(&fonts::lgfxJapanGothic_12);
+  canvas.setFont(&fonts::lgfxJapanGothic_16);
 
   static uint8_t sid = 0x80;  // キープアライブ用Service ID
   
@@ -703,7 +707,7 @@ void sendKeepAlive() {
         
         // エンドコード判定
         if (mainEndCode == 0x00 && subEndCode == 0x00) {
-          canvas.setTextColor(GREEN);
+          canvas.setTextColor(WHITE);
           canvas.print("〇 通信確認正常 ");
           
           // PLC時刻データを取得（レスポンスに含まれている場合）
@@ -723,8 +727,8 @@ void sendKeepAlive() {
             int minInt = (min >> 4) * 10 + (min & 0x0F);
             int secInt = (sec >> 4) * 10 + (sec & 0x0F);
             
-            canvas.printf("PLC時刻: 20%02d/%02d/%02d %02d:%02d:%02d\n", 
-                         yearInt, monthInt, dayInt, hourInt, minInt, secInt);
+            canvas.printf("PLC時刻: %02d:%02d:%02d\n", 
+                         hourInt, minInt, secInt);
           }
           
           canvas.setTextColor(WHITE);
@@ -743,7 +747,7 @@ void sendKeepAlive() {
   }
   
   if (!responseReceived) {
-    canvas.setTextColor(YELLOW);
+    canvas.setTextColor(WHITE);
     canvas.println("△ 通信確認タイムアウト");
     canvas.setTextColor(WHITE);
   }
