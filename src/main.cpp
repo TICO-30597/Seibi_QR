@@ -12,8 +12,8 @@
  *   C (右): 整備完了モード → QR読み取り時に STATUS="02" を送信
  *
  * QRサンプル データ例:
- *  "01" + "10"+ "01" + "DK37173JB352101 00" + "01" + "20240612153045"
- *    (ライン番号 + 工程番号 + ステータス + QRコードデータ + 通し番号 + タイムスタンプ)
+ *  "20240612153045" + "01" + "10"+ "01" + "DK37173JB352101  00"
+ *    (タイムスタンプ14桁 + ライン番号2桁 + 工程番号2桁 + ステータス2桁 + QRコードデータ19桁)
  */
 
 #include <M5Unified.h>
@@ -78,7 +78,7 @@ String LINE_NUM = "01";  // ライン番号（CSVから上書き可能）
 const int WIFI_CONNECT_RETRY_MAX = 20;
 const int WIFI_CONNECT_RETRY_DELAY = 1000;  // ms
 const unsigned long SCAN_TIMEOUT_MS = 20000;  // QRスキャンタイムアウト(20秒)
-const unsigned long KEEPALIVE_INTERVAL = 15000;  // キープアライブ間隔(30秒)
+const unsigned long KEEPALIVE_INTERVAL = 15000;  // キープアライブ間隔(15秒)
 
 // ========================================
 // グローバル変数
@@ -747,7 +747,7 @@ void sendKeepAlive() {
 
 /**
  * キープアライブチェック
- * 30秒間無通信ならキープアライブパケットを送信
+ * 15秒間無通信ならキープアライブパケットを送信
  */
 void checkKeepAlive() {
   // WiFi接続チェック
