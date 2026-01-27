@@ -708,7 +708,7 @@ void sendKeepAlive() {
         // エンドコード判定
         if (mainEndCode == 0x00 && subEndCode == 0x00) {
           canvas.setTextColor(WHITE);
-          canvas.print("〇 通信確認正常 ");
+          canvas.print("  通信確認正常 ");
           
           // PLC時刻データを取得（レスポンスに含まれている場合）
           if (len >= 21) {  // 時刻データを含む完全なレスポンス
@@ -736,7 +736,7 @@ void sendKeepAlive() {
           break;
         } else {
           canvas.setTextColor(YELLOW);
-          canvas.printf("△ 通信確認異常: %02X %02X\n", mainEndCode, subEndCode);
+          canvas.printf("  通信確認異常: %02X %02X\n", mainEndCode, subEndCode);
           canvas.setTextColor(WHITE);
           responseReceived = true;
           break;
@@ -748,7 +748,7 @@ void sendKeepAlive() {
   
   if (!responseReceived) {
     canvas.setTextColor(WHITE);
-    canvas.println("△ 通信確認タイムアウト");
+    canvas.println("  通信確認タイムアウト");
     canvas.setTextColor(WHITE);
   }
 
